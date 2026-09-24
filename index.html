@@ -216,7 +216,6 @@ body{
   opacity:0;pointer-events:none;transition:opacity .18s;
   display:flex;align-items:flex-end;justify-content:center;
 }
-#sheet.on ~ x{} 
 #shOverlay.on{opacity:1;pointer-events:auto}
 #sheet{
   width:100%;max-width:760px;max-height:88%;display:flex;flex-direction:column;
@@ -2271,11 +2270,11 @@ function openSheet(title,body,o){
   if(o.right){ r.style.display=''; r.textContent=o.right; r.onclick=function(){ closeSheet(); if(o.onRight)o.onRight(); }; }
   else r.style.display='none';
   $('#shLeft').onclick=function(){ closeSheet(); if(o.onClose)o.onClose(); };
-  $('#sheet').classList.add('on');
+  $('#shOverlay').classList.add('on');
   $('#shB').scrollTop=0;
   if(o.onOpen)o.onOpen();
 }
-function closeSheet(){ $('#sheet').classList.remove('on'); $('#shB').onclick=null; $('#shB').onchange=null; }
+function closeSheet(){ $('#shOverlay').classList.remove('on'); $('#shB').onclick=null; $('#shB').onchange=null; }
 var toastTimer=null;
 function toast(msg,acts){
   var t=$('#toast');
