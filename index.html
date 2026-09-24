@@ -2080,7 +2080,7 @@ function renderHand(lines,seed,penId){
   var W=1240,H=1754,R=rng(seed);
   var rnd=function(a,b){return a+(b-a)*R();};
   var PEN=penOf(penId), FAM='"Caneta-'+PEN.id+'","Segoe Script",cursive';
-  var LINE=64, TOP=190, LEFT=120, RIGHT=W-110, BOTTOM=H-130, FS=PEN.fs;
+  var FS=PEN.fs, LINE=Math.round(FS*1.55), TOP=150, LEFT=120, RIGHT=W-110, BOTTOM=H-130;
   var pages=[], cv, ctx, y, x0, slope, drift, lineNo=0;
   function ink(a){ return 'rgba(22,52,150,'+(a||0.88)+')'; }
   function paper(){
@@ -2093,6 +2093,7 @@ function renderHand(lines,seed,penId){
   paper();
   function newLine(){ y+=LINE+rnd(-3,4); lineNo++; if(y>BOTTOM) paper(); slope=rnd(-0.009,0.009); drift=rnd(-3,3); x0=LEFT+rnd(-4,12); }
   lines.forEach(function(entry){
+    if(!entry){ newLine(); return; }
     var words=entry.split(/\s+/), x=x0, yy=y;
     words.forEach(function(w){
       ctx.font=FS+'px '+FAM;
@@ -2107,17 +2108,14 @@ function renderHand(lines,seed,penId){
       ctx.restore();
       x+=m+ctx.measureText(' ').width+rnd(-2,4);
     });
-    newLine(); newLine();
+    newLine();
   });
   return pages;
 }
 function openHand(){
   if(!S.items.length){toast('Nenhuma NC lançada ainda.');return;}
   var lines=['ÁREA AUDITADA: '+(S.area||''),'AVALIADOR: '+(S.aval||''),'DATA: '+brDate(S.data),''];
-  grouped(S.items).forEach(function(g){
-    lines.push(g.c+' - '+ITEM[g.c].s+':');
-    g.items.forEach(function(it){lines.push('- '+ncOut(it));});
-  });
+  sortedNCs().forEach(function(x){ lines.push(x.c+' - '+x.t); });
   var pen=penOf(CFG.pen).id, seed=Date.now()&0xffffffff, pages=[];
   var draw=function(){
     return loadPen(pen).then(function(){
@@ -2301,7 +2299,8 @@ var IC={
 function setupMic(){
   var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   var mic=$('#mic');
-  if(!SR){ mic.style.display='none'; return; }
+  var isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+  if(!SR||isIOS){ mic.style.display='none'; return; }
   var rec=null;
   mic.onclick=function(){
     if(rec){ rec.stop(); return; }
