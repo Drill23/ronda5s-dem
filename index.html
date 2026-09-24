@@ -260,6 +260,12 @@ body{
   color:var(--txt);font-size:16px;font-family:inherit;padding:13px 6px;cursor:pointer;
 }
 .areaopt.cur{color:var(--amber);font-weight:700}
+.arearow{display:flex;align-items:center}
+.arearow .areaopt{flex:1;min-width:0}
+.areaed{flex:none;background:none;border:none;border-bottom:1px solid var(--line);color:var(--dim);padding:13px 10px;cursor:pointer}
+.areaed:active{color:var(--amber)}
+.areaadd{display:flex;align-items:center;gap:8px;width:100%;background:none;border:1px dashed var(--line);border-radius:12px;color:var(--amber);font-size:15px;font-weight:600;font-family:inherit;padding:12px 10px;cursor:pointer;margin:2px 0 6px}
+.areaadd:active{background:var(--card)}
 .areaopt:active{background:var(--card)}
 .narow{
   display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);
@@ -297,7 +303,6 @@ body{
   #shOverlay{align-items:center}
   #sheet{border-radius:22px;border-bottom:1px solid var(--line);max-height:84%}
 }
-
 </style>
 </head>
 <body>
@@ -2247,6 +2252,59 @@ function askNewRonda(){
   }});
 }
 
+/* ---------- áreas: adicionar / renomear ---------- */
+function renderAreasList(){
+  var q=$('#suAreaQ'), box=$('#suAreas'); if(!q||!box)return;
+  var nq=N(q.value);
+  var list=AREAS.filter(function(a){return !nq||N(a.n).indexOf(nq)>=0;});
+  var h='<button class="areaadd" data-add="1">'+IC.plus+'<span>Adicionar nova área</span></button>';
+  h+=list.slice(0,60).map(function(a){
+    return '<div class="arearow"><button class="areaopt'+(N(a.n)===N(q.dataset.pick||'')?' cur':'')+'" data-a="'+esc(a.n)+'">'+esc(a.n)+'</button><button class="areaed" data-ed="'+esc(a.n)+'" aria-label="Renomear área">'+IC.edit+'</button></div>';
+  }).join('');
+  box.innerHTML=h;
+}
+function snapshotSetup(){
+  var q=$('#suAreaQ');
+  return {aval:($('#suAval')||{value:''}).value, data:($('#suData')||{value:''}).value, q:q?q.value:'', pick:q?(q.dataset.pick||''):''};
+}
+function restoreSetup(k){
+  if(!k)return;
+  if($('#suAval')&&k.aval)$('#suAval').value=k.aval;
+  if($('#suData')&&k.data)$('#suData').value=k.data;
+  var q=$('#suAreaQ');
+  if(q&&k.q){q.value=k.q; q.dataset.pick=k.pick||'';}
+  renderAreasList();
+}
+function addAreaFlow(){
+  var keep=snapshotSetup();
+  openSheet('Nova área','<div class="fld"><label>Nome da nova área</label><input id="naNome" type="text" placeholder="ex.: Expedição, Câmara fria 3" autocomplete="off"></div><div class="hint-s">A área entra na sua lista e fica salva no aparelho, mesmo sem internet.</div>',{right:'Adicionar',left:'Voltar',onRight:function(){
+    var nn=$('#naNome').value.trim();
+    openSetup(); restoreSetup(keep);
+    if(!nn){toast('Digite o nome da área.');return;}
+    if(AREAS.some(function(a){return N(a.n)===N(nn);})){toast('Essa área já existe na lista.');return;}
+    AREAS.push({n:nn}); saveAreas();
+    var q=$('#suAreaQ'); q.value=nn; q.dataset.pick=nn; renderAreasList();
+    toast('Área adicionada e selecionada');
+  },onClose:function(){ openSetup(); restoreSetup(keep); },onOpen:function(){var i=$('#naNome'); if(i)i.focus();}});
+}
+function renameAreaFlow(oldName){
+  var keep=snapshotSetup();
+  openSheet('Renomear área','<div class="fld"><label>Nome da área</label><input id="rnNome" type="text" value="'+esc(oldName)+'" autocomplete="off"></div><div class="hint-s">Rondas já arquivadas mantêm o nome antigo.</div>',{right:'Salvar',left:'Voltar',onRight:function(){
+    var nn=$('#rnNome').value.trim();
+    openSetup(); restoreSetup(keep);
+    if(!nn){toast('Digite o nome da área.');return;}
+    if(N(nn)===N(oldName)){return;}
+    if(AREAS.some(function(a){return N(a.n)===N(nn);})){toast('Já existe uma área com esse nome.');return;}
+    var a=AREAS.filter(function(x){return N(x.n)===N(oldName);})[0];
+    if(a){a.n=nn; saveAreas();}
+    if(N(S.area||'')===N(oldName)){S.area=nn; save(); updHeader();}
+    var q=$('#suAreaQ');
+    if(q&&N(keep.q||'')===N(oldName)){q.value=nn; q.dataset.pick=(N(keep.pick||'')===N(oldName))?nn:(keep.pick||'');}
+    renderAreasList();
+    toast('Área renomeada');
+  },onClose:function(){ openSetup(); restoreSetup(keep); },onOpen:function(){var i=$('#rnNome'); if(i){i.focus();i.select();}}});
+}
+
 /* ---------- setup ---------- */
 function openSetup(){
   var body='<div class="fld"><label>Avaliador</label><input id="suAval" type="text" placeholder="Seu nome" value="'+esc(S.aval||'')+'" autocomplete="off"></div>'+
@@ -2264,19 +2322,14 @@ function openSetup(){
     if(S.area) toast('Ronda em '+S.area);
   }});
   var q=$('#suAreaQ');
-  function renderAreas(){
-    var nq=N(q.value);
-    var list=AREAS.filter(function(a){return !nq||N(a.n).indexOf(nq)>=0;});
-    $('#suAreas').innerHTML=list.slice(0,60).map(function(a){
-      return '<button class="areaopt'+(N(a.n)===N(q.dataset.pick||'')?' cur':'')+'" data-a="'+esc(a.n)+'">'+esc(a.n)+'</button>';
-    }).join('');
-  }
-  q.oninput=function(){q.dataset.pick='';renderAreas();};
+  q.oninput=function(){q.dataset.pick='';renderAreasList();};
   $('#suAreas').onclick=function(e){
+    var add=e.target.closest('[data-add]'); if(add){addAreaFlow();return;}
+    var ed=e.target.closest('[data-ed]'); if(ed){renameAreaFlow(ed.dataset.ed);return;}
     var b=e.target.closest('[data-a]'); if(!b)return;
-    q.value=b.dataset.a; q.dataset.pick=b.dataset.a; renderAreas();
+    q.value=b.dataset.a; q.dataset.pick=b.dataset.a; renderAreasList();
   };
-  renderAreas();
+  renderAreasList();
 }
 
 /* ---------- opções ---------- */
