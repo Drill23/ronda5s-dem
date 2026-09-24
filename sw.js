@@ -1,6 +1,6 @@
 // Guarda o app no aparelho para abrir sem internet.
 // Ao atualizar o index.html, troque a versão abaixo (v1 -> v2) para os celulares baixarem a nova.
-const VERSAO = 'ronda5s-dem-v3';
+const VERSAO = 'ronda5s-dem-v4';
 const PREFIXO = 'ronda5s-dem-';
 const ARQUIVOS = ['./', './index.html', './manifest.webmanifest'];
 self.addEventListener('install', e => {
