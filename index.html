@@ -2023,6 +2023,33 @@ function deliverFile(blob,name){
   setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},2000);
   return Promise.resolve(true);
 }
+/* Gera um PDF A4 simples embutindo cada página manuscrita como imagem JPEG (1 imagem por página). */
+function pdfFromJPEGs(jpegs,w,h){
+  var PW=595.28,PH=841.89,n=jpegs.length;
+  var enc=function(s){var b=new Uint8Array(s.length);for(var i=0;i<s.length;i++)b[i]=s.charCodeAt(i)&255;return b;};
+  var chunks=[],offs=[],pos=0;
+  function push(d){var b=(typeof d==='string')?enc(d):new Uint8Array(d);chunks.push(b);pos+=b.length;}
+  var pageBase=3,imgBase=3+n,ctBase=3+2*n,total=3*n+2;
+  push('%PDF-1.4\n');
+  function obj(id,body){offs[id]=pos;push(id+' 0 obj\n');push(body);push('\nendobj\n');}
+  obj(1,'<< /Type /Catalog /Pages 2 0 R >>');
+  var kids='';for(var i=0;i<n;i++)kids+=(pageBase+i)+' 0 R ';
+  obj(2,'<< /Type /Pages /Kids ['+kids+'] /Count '+n+' >>');
+  for(var i=0;i<n;i++)obj(pageBase+i,'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 '+PW+' '+PH+'] /Resources << /XObject << /Im'+(i+1)+' '+(imgBase+i)+' 0 R >> /ProcSet [/PDF /ImageC] >> /Contents '+(ctBase+i)+' 0 R >>');
+  for(var i=0;i<n;i++){
+    offs[imgBase+i]=pos;push((imgBase+i)+' 0 obj\n');
+    push('<< /Type /XObject /Subtype /Image /Width '+w+' /Height '+h+' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length '+jpegs[i].byteLength+' >>\nstream\n');
+    push(jpegs[i]);push('\nendstream\nendobj\n');
+  }
+  for(var i=0;i<n;i++){var ct='q\n'+PW+' 0 0 '+PH+' 0 0 cm\n/Im'+(i+1)+' Do\nQ\n';obj(ctBase+i,'<< /Length '+ct.length+' >>\nstream\n'+ct+'endstream');}
+  var xrefPos=pos;
+  push('xref\n0 '+(total+1)+'\n0000000000 65535 f \n');
+  for(var id=1;id<=total;id++)push(('0000000000'+offs[id]).slice(-10)+' 00000 n \n');
+  push('trailer\n<< /Size '+(total+1)+' /Root 1 0 R >>\nstartxref\n'+xrefPos+'\n%%EOF');
+  var out=new Uint8Array(pos),p=0;
+  chunks.forEach(function(c){out.set(c,p);p+=c.length;});
+  return new Blob([out],{type:'application/pdf'});
+}
 var TPL=null, XROWS=null;
 function doExcel(){
   if(!S.area){toast('Escolha a área primeiro.');openSetup();return;}
@@ -2127,8 +2154,25 @@ function openHand(){
     var body='<div class="pens">'+PENS.map(function(p){return '<button class="chip'+(p.id===pen?' on':'')+'" data-pen="'+p.id+'">'+p.nome+'</button>';}).join('')+'</div>'+
       pages.map(function(p){return '<img class="pageimg" src="'+p.toDataURL('image/jpeg',0.85)+'" alt="Página manuscrita">';}).join('')+
       '<div class="hint-s" style="text-align:center">'+pages.length+(pages.length>1?' páginas A4':' página A4')+' · folha branca, caneta azul</div>'+
-      '<button class="btn ghost" id="hdAgain">Outra variação do traço</button>';
-    openSheet('Manuscrito',body,{right:'Salvar',left:'Fechar',onRight:function(){
+      '<button class="btn ghost" id="hdAgain">Outra variação do traço</button>'+
+      '<button class="btn ghost" id="hdImgs">Salvar como imagens (PNG)</button>';
+    openSheet('Manuscrito',body,{right:'Salvar PDF',left:'Fechar',onRight:function(){
+      var d=S.data?S.data.split('-').reverse().join('-'):'';
+      var base=('NCs 5S manuscrito - '+(S.area||'Area')+(d?' - '+d:'')).replace(/[\\/:*?"<>|]+/g,'-').replace(/\s+/g,' ').trim();
+      toast('Gerando PDF…');
+      Promise.all(pages.map(function(cv){return new Promise(function(res){cv.toBlob(function(b){res(b.arrayBuffer());},'image/jpeg',0.92);});})).then(function(jpegs){
+        var blob=pdfFromJPEGs(jpegs,pages[0].width,pages[0].height);
+        deliverFile(blob,base+'.pdf').then(function(){toast('PDF pronto: '+pages.length+(pages.length>1?' páginas A4':' página A4'));});
+      });
+    }});
+    var pensEl=document.querySelector('.pens');
+    if(pensEl) pensEl.onclick=function(e){
+      var b=e.target.closest('[data-pen]'); if(!b||b.dataset.pen===pen)return;
+      pen=b.dataset.pen; CFG.pen=pen; saveCFG(); draw();
+    };
+    var ag=$('#hdAgain'); if(ag) ag.onclick=function(){ seed=(seed*1664525+1013904223)>>>0; draw(); };
+    var im=$('#hdImgs'); if(im) im.onclick=function(){
+      closeSheet();
       var d=S.data?S.data.split('-').reverse().join('-'):'';
       var base=('NCs 5S manuscrito - '+(S.area||'Area')+(d?' - '+d:'')).replace(/[\\/:*?"<>|]+/g,'-').replace(/\s+/g,' ').trim();
       var i=0;
@@ -2139,13 +2183,7 @@ function openHand(){
         },'image/png');
       }
       next();
-    }});
-    var pensEl=document.querySelector('.pens');
-    if(pensEl) pensEl.onclick=function(e){
-      var b=e.target.closest('[data-pen]'); if(!b||b.dataset.pen===pen)return;
-      pen=b.dataset.pen; CFG.pen=pen; saveCFG(); draw();
     };
-    var ag=$('#hdAgain'); if(ag) ag.onclick=function(){ seed=(seed*1664525+1013904223)>>>0; draw(); };
   }
   toast('Escrevendo…');
   draw();
@@ -2385,7 +2423,6 @@ updHeader(); renderLoc(); renderEmpty(); updDock();
 listEl.innerHTML='<div class="loading">Carregando o banco de não conformidades…</div>';
 setTimeout(function(){ boot(); if(!S.area) openSetup(); },30);
 })();
-
 </script>
 <script>
 if('serviceWorker' in navigator && /^https?:/.test(location.protocol)){ window.addEventListener('load',function(){ navigator.serviceWorker.register('sw.js').catch(function(){}); }); }
